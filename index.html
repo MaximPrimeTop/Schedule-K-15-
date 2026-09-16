@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Розклад занять</title>
+
+<!-- Шрифт з хорошою підтримкою кирилиці. Якщо CDN недоступний — є системний фолбек. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+/* =========================================================================
+   0. ТОКЕНИ ДИЗАЙНУ — тут зручно міняти кольори/розміри для всього сайту
+   ========================================================================= */
+:root{
+  --bg: #0A0D14;
+  --bg-glow-1: #1B2A3D;
+  --bg-glow-2: #241A2E;
+
+  --card-bg: rgba(255,255,255,0.035);
+  --card-bg-strong: rgba(255,255,255,0.05);
+  --card-border: rgba(255,255,255,0.09);
+
+  --text: #EDEFF4;
+  --text-dim: #9BA1B0;
+  --text-faint: #5B6172;
+
+  --accent: #E7B24E;
+  --accent-soft: rgba(231,178,78,0.13);
+  --accent-border: rgba(231,178,78,0.4);
+
+  --zoom-dot: #6FA8FF;
+  --meet-dot: #6FE0A0;
+
+  --radius-lg: 26px;
+  --radius-md: 16px;
+  --radius-sm: 10px;
+
+  --ease: cubic-bezier(.22,.9,.32,1);
+  --font: 'Golos Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/* =========================================================================
+   1. RESET / БАЗА
+   ========================================================================= */
+*, *::before, *::after{ box-sizing:border-box; }
+html, body{ height:100%; }
+body{
+  margin:0;
+  min-height:100vh;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font);
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+button{ font-family:inherit; }
+a{ color:inherit; }
+
+:focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:3px;
+  border-radius:4px;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{ transition:none !important; animation:none !important; }
+}
+
+/* =========================================================================
+   2. СЦЕНА (фон + декоративне світіння)
+   ========================================================================= */
+.scene{
+  position:relative;
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:32px 16px;
+}
+.scene__glow{
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:0;
+  background:
+    radial-gradient(480px 320px at 18% 20%, var(--bg-glow-1), transparent 60%),
+    radial-gradient(520px 360px at 84% 78%, var(--bg-glow-2), transparent 60%);
+  opacity:.55;
+  filter:blur(10px);
+}
+/* Віньєтка по краях — підсилює приглушеність бічних карток ближче до країв екрана */
+.scene__vignette{
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:2;
+  background:linear-gradient(to right,
+    var(--bg) 0%, transparent 14%,
+    transparent 86%, var(--bg) 100%);
+}
+
+/* =========================================================================
+   3. КАРУСЕЛЬ (стрілки + картки дня)
+   ========================================================================= */
+.carousel{
+  position:relative;
+  z-index:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:18px;
+  width:100%;
+  max-width:1100px;
+}
+
+.nav-btn{
+  display:none; /* показуються лише на мобільній верстці, див. медіа-запит нижче */
+  align-items:center;
+  justify-content:center;
+  width:44px;
+  height:44px;
+  flex-shrink:0;
+  border-radius:50%;
+  border:1px solid var(--card-border);
+  background:var(--card-bg);
+  color:var(--text-dim);
+  cursor:pointer;
+  transition:background .2s var(--ease), color .2s var(--ease), transform .15s var(--ease);
+}
+.nav-btn:hover{ color:var(--text); background:var(--card-bg-strong); }
+.nav-btn:active{ transform:scale(.92); }
+.nav-btn svg{ width:18px; height:18px; }
+
+.cards{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:22px;
+  transition:opacity .22s var(--ease), transform .22s var(--ease);
+}
+.cards.is-leaving-next{ opacity:0; transform:translateX(-14px); }
+.cards.is-leaving-prev{ opacity:0; transform:translateX(14px); }
+
+/* =========================================================================
+   4. КАРТКА ДНЯ
+   ========================================================================= */
+.day-card{
+  border-radius:var(--radius-lg);
+  border:1px solid var(--card-border);
+  background:var(--card-bg);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+  box-shadow:0 20px 60px -20px rgba(0,0,0,.6);
+  padding:30px 26px;
+}
+
+.day-card--center{
+  width:min(430px, 100%);
+  flex-shrink:0;
+}
+
+.day-card--side{
+  width:250px;
+  flex-shrink:0;
+  transform:scale(.86);
+  opacity:.4;
+  filter:blur(1.5px);
+  cursor:pointer;
+  border:none;
+  text-align:left;
+  transition:opacity .2s var(--ease), filter .2s var(--ease), transform .2s var(--ease);
+}
+.day-card--side:hover{ opacity:.65; filter:blur(0); }
+.day-card--side .teacher__icon{ pointer-events:none; } /* на бічних картках попапи не відкриваються — клік перемикає день */
+
+.day-card__header{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  margin-bottom:18px;
+  padding-bottom:16px;
+  border-bottom:1px solid var(--card-border);
+}
+.day-card__weekday{ font-size:19px; font-weight:700; }
+.day-card__date{ font-size:14px; color:var(--text-faint); }
+
+.day-card__banner{
+  font-size:13px;
+  color:var(--text-dim);
+  background:rgba(255,255,255,.04);
+  border:1px solid var(--card-border);
+  border-radius:var(--radius-sm);
+  padding:10px 14px;
+  margin-bottom:16px;
+}
+
+/* ---- порожній стан (вихідний / немає даних) ---- */
+.empty-state{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  text-align:center;
+  gap:12px;
+  padding:26px 6px 6px;
+  color:var(--text-dim);
+}
+.empty-state svg{ width:34px; height:34px; color:var(--text-faint); }
+.empty-state__title{ font-size:15px; color:var(--text); font-weight:600; }
+.empty-state__hint{ font-size:13px; color:var(--text-faint); }
+
+/* =========================================================================
+   5. ПАРА (рядок предмета)
+   ========================================================================= */
+.pairs{ display:flex; flex-direction:column; }
+
+.pair{
+  padding:16px 4px 16px 14px;
+  border-top:1px solid var(--card-border);
+  border-left:3px solid transparent;
+  transition:opacity .25s var(--ease);
+}
+.pair:first-child{ border-top:none; padding-top:2px; }
+
+.pair--past{ opacity:.4; }
+.pair--past .pair__subject{ color:var(--text-dim); }
+
+.pair--current{
+  border-left-color:var(--accent);
+  background:var(--accent-soft);
+  border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.pair__meta{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:12.5px;
+  color:var(--text-faint);
+  margin-bottom:6px;
+}
+.pair__badge{
+  font-size:11px;
+  font-weight:600;
+  color:#151109;
+  background:var(--accent);
+  padding:2px 8px;
+  border-radius:999px;
+}
+
+.pair__subject{
+  font-size:16.5px;
+  font-weight:600;
+  line-height:1.3;
+  margin-bottom:3px;
+}
+.pair__room{
+  font-size:13px;
+  color:var(--text-faint);
+  margin-bottom:10px;
+}
+
+.pair__teachers{
+  display:flex;
+  justify-content:center;
+  gap:14px;
+}
+.pair__teachers--split{ justify-content:space-between; }
+.pair__divider{
+  width:1px;
+  align-self:stretch;
+  background:var(--card-border);
+  flex-shrink:0;
+}
+
+.teacher{
+  position:relative;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  min-width:0;
+}
+.pair__teachers--split .teacher{ flex:1 1 0; }
+.pair__teachers--split .teacher:last-child{ justify-content:flex-end; }
+
+.teacher__name{
+  font-size:13.5px;
+  color:var(--text-dim);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.teacher__icon{
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:22px;
+  height:22px;
+  border-radius:50%;
+  border:1px solid var(--card-border);
+  background:rgba(255,255,255,.03);
+  color:var(--text-dim);
+  cursor:pointer;
+  transition:background .2s var(--ease), color .2s var(--ease), border-color .2s var(--ease);
+}
+.teacher__icon svg{ width:12px; height:12px; }
+.teacher__icon--zoom:hover, .teacher__icon--zoom.is-open{ color:var(--zoom-dot); border-color:var(--zoom-dot); }
+.teacher__icon--meet:hover, .teacher__icon--meet.is-open{ color:var(--meet-dot); border-color:var(--meet-dot); }
+
+/* ---- попап з посиланням / приміткою ---- */
+.popup{
+  display:none;
+  position:absolute;
+  top:calc(100% + 9px);
+  left:50%;
+  transform:translateX(-50%);
+  z-index:30;
+  min-width:150px;
+  max-width:210px;
+  padding:10px 12px;
+  border-radius:var(--radius-sm);
+  background:#171B26;
+  border:1px solid var(--card-border);
+  box-shadow:0 16px 34px -12px rgba(0,0,0,.65);
+  text-align:center;
+}
+.teacher__icon.is-open + .popup{ display:block; }
+@media (hover:hover) and (pointer:fine){
+  .teacher__icon:hover + .popup{ display:block; }
+}
+.popup__link{
+  display:inline-block;
+  font-size:13px;
+  font-weight:600;
+  color:var(--accent);
+  text-decoration:none;
+}
+.popup__link:hover{ text-decoration:underline; }
+.popup__note{
+  margin:0;
+  font-size:12.5px;
+  color:var(--text-dim);
+  line-height:1.4;
+}
+.popup__note--empty{ color:var(--text-faint); }
+
+/* =========================================================================
+   6. СТАН ЗАВАНТАЖЕННЯ / ПОМИЛКИ
+   ========================================================================= */
+.status-state{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:14px;
+  text-align:center;
+  color:var(--text-dim);
+  font-size:14px;
+}
+.status-state__title{ font-size:16px; font-weight:600; color:var(--text); }
+.retry-btn{
+  margin-top:4px;
+  padding:9px 18px;
+  border-radius:999px;
+  border:1px solid var(--accent-border);
+  background:var(--accent-soft);
+  color:var(--accent);
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+}
+.retry-btn:hover{ background:rgba(231,178,78,.22); }
+
+.spinner{
+  width:26px; height:26px;
+  border-radius:50%;
+  border:2px solid var(--card-border);
+  border-top-color:var(--accent);
+  animation:spin .8s linear infinite;
+}
+@keyframes spin{ to{ transform:rotate(360deg); } }
+
+/* =========================================================================
+   7. МОБІЛЬНА ВЕРСТКА (<768px) — бічні картки ховаються, з'являються стрілки
+   ========================================================================= */
+@media (max-width:768px){
+  .day-card--side{ display:none; }
+  .day-card--center{ width:100%; padding:26px 20px; }
+  .nav-btn{ display:flex; }
+  .scene__vignette{ display:none; }
+}
+</style>
+</head>
+<body>
+
+<div class="scene">
+  <div class="scene__glow"></div>
+  <div class="scene__vignette"></div>
+
+  <div class="carousel">
+    <button class="nav-btn nav-btn--prev" id="btnPrev" aria-label="Попередній день" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+    </button>
+
+    <div class="cards" id="cards">
+      <button class="day-card day-card--side day-card--prev" id="cardPrev" type="button" aria-label="Попередній день"></button>
+      <section class="day-card day-card--center" id="cardCenter" aria-live="polite"></section>
+      <button class="day-card day-card--side day-card--next" id="cardNext" type="button" aria-label="Наступний день"></button>
+    </div>
+
+    <button class="nav-btn nav-btn--next" id="btnNext" aria-label="Наступний день" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* =========================================================================
+   КОНФІГ — сюди вставити посилання на опубліковану Google Таблицю
+   (File → Share → Publish to web → формат CSV, посилання виду
+   https://docs.google.com/spreadsheets/d/e/XXXXX/pub?output=csv)
+   ========================================================================= */
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQbQMgs7oZwteozsbVcKGurREdfzqlQlylTpmVFL605l7wGvk4e8JHtzjwpdNMcBSwPq9Yi7mb4SVL6/pub?gid=777147651&single=true&output=csv";
+
+// Поріг свайпу (px) та тривалість анімації перемикання дня (ms) — можна міняти
+const SWIPE_THRESHOLD = 45;
+const TRANSITION_MS = 220;
+// Як часто перевіряти поточний час, щоб підсвітка "зараз" лишалась актуальною (ms)
+const CLOCK_REFRESH_MS = 60000;
+
+// Назви днів тижня, індекс відповідає JS getUTCDay(): 0 = неділя ... 6 = субота
+const DAY_NAMES = ["Неділя","Понеділок","Вівторок","Середа","Четвер","П'ятниця","Субота"];
+
+/* =========================================================================
+   СТАН ЗАСТОСУНКУ
+   ========================================================================= */
+let scheduleRows = [];   // рядки з CSV
+let todayUTC = null;     // "сьогодні" за Києвом, як Date на 00:00 UTC (лише для арифметики дат)
+let nowMinutes = 0;      // поточний час у Києві, хвилин від півночі
+let baseOffset = 0;      // зміщення центральної картки від сьогодні, у днях
+let isAnimating = false;
+
+const els = {
+  cards: document.getElementById("cards"),
+  cardPrev: document.getElementById("cardPrev"),
+  cardCenter: document.getElementById("cardCenter"),
+  cardNext: document.getElementById("cardNext"),
+  btnPrev: document.getElementById("btnPrev"),
+  btnNext: document.getElementById("btnNext"),
+};
+
+/* =========================================================================
+   ЧАС / ДАТА (часовий пояс Europe/Kyiv, незалежно від пояса пристрою)
+   ========================================================================= */
+function getKyivNow(){
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Kyiv",
+    year:"numeric", month:"2-digit", day:"2-digit",
+    hour:"2-digit", minute:"2-digit", hour12:false
+  }).formatToParts(new Date());
+  const get = t => Number(parts.find(p => p.type === t).value);
+  return { year:get("year"), month:get("month"), day:get("day"), hour:get("hour"), minute:get("minute") };
+}
+
+function refreshClock(){
+  const k = getKyivNow();
+  todayUTC = Date.UTC(k.year, k.month - 1, k.day);
+  nowMinutes = k.hour * 60 + k.minute;
+}
+
+function addDaysUTC(baseMs, n){
+  return baseMs + n * 86400000;
+}
+
+function formatDateUA(ms){
+  return new Intl.DateTimeFormat("uk-UA", { day:"numeric", month:"long", timeZone:"UTC" }).format(new Date(ms));
+}
+
+function normalizeDayName(s){
+  return (s || "").toLowerCase().replace(/['’ʼ]/g, "").trim();
+}
+
+function parseTimeToMinutes(str){
+  if (!str) return null;
+  const m = String(str).trim().match(/^(\d{1,2})[:.](\d{2})/);
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+/* =========================================================================
+   CSV: ЗАВАНТАЖЕННЯ ТА РОЗБІР
+   Простий власний парсер (без зовнішніх бібліотек) — коректно обробляє
+   поля в лапках з комами/переносами рядків усередині.
+   ========================================================================= */
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (inQuotes){
+      if (c === '"'){
+        if (text[i+1] === '"'){ field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ","){ row.push(field); field = ""; }
+      else if (c === "\n"){ row.push(field); rows.push(row); row = []; field = ""; }
+      else if (c === "\r"){ /* ігноруємо, перенос обробляється через \n */ }
+      else field += c;
+    }
+  }
+  if (field.length || row.length){ row.push(field); rows.push(row); }
+  if (!rows.length) return [];
+
+  const headers = rows[0].map(h => h.trim());
+  return rows.slice(1)
+    .filter(r => r.some(v => v && v.trim() !== "")) // прибираємо повністю порожні рядки
+    .map(r => {
+      const obj = {};
+      headers.forEach((h, idx) => { obj[h] = (r[idx] ?? "").trim(); });
+      return obj;
+    });
+}
+
+async function loadSchedule(){
+  renderLoadingState();
+  try {
+    const res = await fetch(CSV_URL, { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    scheduleRows = parseCSV(text).filter(r => (r["День"] || "").trim() && (r["Предмет"] || "").trim());
+    refreshClock();
+    renderAll();
+    setInterval(() => { refreshClock(); renderAll(); }, CLOCK_REFRESH_MS);
+  } catch (err){
+    renderErrorState();
+  }
+}
+
+/* =========================================================================
+   ДАНІ ДЛЯ КОНКРЕТНОГО ДНЯ
+   ========================================================================= */
+function getDayInfo(offset){
+  const dateMs = addDaysUTC(todayUTC, offset);
+  const weekdayIdx = new Date(dateMs).getUTCDay();
+  const dayName = DAY_NAMES[weekdayIdx];
+  const rows = scheduleRows
+    .filter(r => normalizeDayName(r["День"]) === normalizeDayName(dayName))
+    .sort((a, b) => (Number(a["№ пари"]) || 0) - (Number(b["№ пари"]) || 0));
+  return { dateMs, weekdayIdx, dayName, rows };
+}
+
+function computeStatus(offset, startMin, endMin){
+  if (offset < 0) return "past";
+  if (offset > 0) return "future";
+  if (startMin === null || endMin === null) return "future";
+  if (nowMinutes < startMin) return "future";
+  if (nowMinutes > endMin) return "past";
+  return "current";
+}
+
+/* =========================================================================
+   РЕНДЕР: ІКОНКИ ПЛАТФОРМ (узагальнені, без відтворення чужих логотипів)
+   ========================================================================= */
+const ICON_ZOOM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="13" height="12" rx="3"></rect><path d="M16 10.5l5-3v9l-5-3" stroke-linejoin="round"></path></svg>';
+const ICON_MEET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="6" width="13" height="12" rx="3"></rect><circle cx="18.5" cy="9.5" r="1.4" fill="currentColor" stroke="none"></circle></svg>';
+
+function escapeHTML(str){
+  return String(str)
+    .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+}
+
+function teacherHTML(name, platform, link, note){
+  name = (name || "").trim();
+  if (!name) return "";
+
+  const plat = (platform || "").trim().toLowerCase();
+  let icon = "", iconClass = "";
+  if (plat === "zoom"){ icon = ICON_ZOOM; iconClass = "teacher__icon--zoom"; }
+  else if (plat === "meet"){ icon = ICON_MEET; iconClass = "teacher__icon--meet"; }
+
+  let popup = "";
+  if (icon){
+    const cleanLink = (link || "").trim();
+    const cleanNote = (note || "").trim();
+    if (cleanLink){
+      popup = `<a class="popup__link" href="${escapeHTML(cleanLink)}" target="_blank" rel="noopener">Приєднатись</a>`;
+    } else if (cleanNote){
+      popup = `<p class="popup__note">${escapeHTML(cleanNote)}</p>`;
+    } else {
+      popup = `<p class="popup__note popup__note--empty">Посилання поки немає</p>`;
+    }
+  }
+
+  return `
+    <div class="teacher">
+      <span class="teacher__name">${escapeHTML(name)}</span>
+      ${icon ? `
+        <button type="button" class="teacher__icon ${iconClass}" data-popup-toggle aria-label="Посилання на пару, ${escapeHTML(name)}">${icon}</button>
+        <div class="popup" role="tooltip">${popup}</div>
+      ` : ""}
+    </div>`;
+}
+
+function pairHTML(row, status){
+  const num = (row["№ пари"] || "").trim();
+  const start = (row["Час початку"] || "").trim();
+  const end = (row["Час кінця"] || "").trim();
+  const subject = (row["Предмет"] || "Без назви").trim();
+  const room = (row["Аудиторія/формат"] || "").trim();
+  const hasSecond = !!(row["Викладач_2"] || "").trim();
+
+  const sub1 = teacherHTML(row["Викладач_1"], row["Платформа_1"], row["Силка_1"], row["Примітка_1"]);
+  const sub2 = hasSecond ? teacherHTML(row["Викладач_2"], row["Платформа_2"], row["Силка_2"], row["Примітка_2"]) : "";
+
+  return `
+    <div class="pair pair--${status}">
+      <div class="pair__meta">
+        ${num ? `<span>${escapeHTML(num)} пара</span>` : ""}
+        ${(start || end) ? `<span>${escapeHTML(start)}–${escapeHTML(end)}</span>` : ""}
+        ${status === "current" ? `<span class="pair__badge">Зараз</span>` : ""}
+      </div>
+      <div class="pair__subject">${escapeHTML(subject)}</div>
+      ${room ? `<div class="pair__room">${escapeHTML(room)}</div>` : ""}
+      <div class="pair__teachers ${hasSecond ? "pair__teachers--split" : ""}">
+        ${sub1}${hasSecond ? '<span class="pair__divider"></span>' : ""}${sub2}
+      </div>
+    </div>`;
+}
+
+const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"></path></svg>';
+const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"></circle><path d="M8 12.5l2.5 2.5L16 9.5"></path></svg>';
+
+function emptyStateHTML(kind){
+  if (kind === "weekend"){
+    return `<div class="empty-state">${ICON_MOON}<div class="empty-state__title">Сьогодні вихідний</div><div class="empty-state__hint">Пар не заплановано</div></div>`;
+  }
+  return `<div class="empty-state">${ICON_CHECK}<div class="empty-state__title">На сьогодні пар більше немає</div><div class="empty-state__hint">Гарного відпочинку</div></div>`;
+}
+
+function dayCardInnerHTML(offset){
+  const { dateMs, weekdayIdx, dayName, rows } = getDayInfo(offset);
+  const isSunday = weekdayIdx === 0;
+
+  let body;
+  if (isSunday || rows.length === 0){
+    body = emptyStateHTML(isSunday ? "weekend" : "no-data");
+  } else {
+    const list = rows.map(r => {
+      const startMin = parseTimeToMinutes(r["Час початку"]);
+      const endMin = parseTimeToMinutes(r["Час кінця"]);
+      return pairHTML(r, computeStatus(offset, startMin, endMin));
+    }).join("");
+
+    let banner = "";
+    if (offset === 0){
+      const allPast = rows.every(r => {
+        const endMin = parseTimeToMinutes(r["Час кінця"]);
+        return endMin !== null && nowMinutes > endMin;
+      });
+      if (allPast) banner = `<div class="day-card__banner">На сьогодні пар більше немає</div>`;
+    }
+    body = banner + `<div class="pairs">${list}</div>`;
+  }
+
+  return `
+    <div class="day-card__header">
+      <span class="day-card__weekday">${escapeHTML(dayName)}</span>
+      <span class="day-card__date">${escapeHTML(formatDateUA(dateMs))}</span>
+    </div>
+    ${body}`;
+}
+
+/* =========================================================================
+   ГОЛОВНИЙ РЕНДЕР
+   ========================================================================= */
+function renderAll(){
+  els.cardCenter.innerHTML = dayCardInnerHTML(baseOffset);
+  els.cardPrev.innerHTML = dayCardInnerHTML(baseOffset - 1);
+  els.cardNext.innerHTML = dayCardInnerHTML(baseOffset + 1);
+}
+
+function renderLoadingState(){
+  els.cardCenter.innerHTML = `<div class="status-state"><div class="spinner"></div><div class="status-state__title">Завантажуємо розклад…</div></div>`;
+  els.cardPrev.innerHTML = "";
+  els.cardNext.innerHTML = "";
+}
+
+function renderErrorState(){
+  els.cardCenter.innerHTML = `
+    <div class="status-state">
+      <div class="status-state__title">Не вдалося завантажити розклад</div>
+      <div>Перевірте інтернет-з'єднання або спробуйте ще раз</div>
+      <button class="retry-btn" id="retryBtn" type="button">Спробувати ще раз</button>
+    </div>`;
+  els.cardPrev.innerHTML = "";
+  els.cardNext.innerHTML = "";
+  document.getElementById("retryBtn").addEventListener("click", loadSchedule);
+}
+
+/* =========================================================================
+   НАВІГАЦІЯ МІЖ ДНЯМИ (плавний перехід)
+   ========================================================================= */
+function navigate(direction){
+  if (isAnimating || !scheduleRows.length) return;
+  isAnimating = true;
+  els.cards.classList.add(direction > 0 ? "is-leaving-next" : "is-leaving-prev");
+  setTimeout(() => {
+    baseOffset += direction;
+    renderAll();
+    els.cards.classList.remove("is-leaving-next", "is-leaving-prev");
+    isAnimating = false;
+  }, TRANSITION_MS);
+}
+
+els.btnPrev.addEventListener("click", () => navigate(-1));
+els.btnNext.addEventListener("click", () => navigate(1));
+els.cardPrev.addEventListener("click", () => navigate(-1));
+els.cardNext.addEventListener("click", () => navigate(1));
+
+/* ---- свайп на мобільних ---- */
+let touchStartX = null;
+els.cards.addEventListener("touchstart", e => { touchStartX = e.changedTouches[0].clientX; }, { passive:true });
+els.cards.addEventListener("touchend", e => {
+  if (touchStartX === null) return;
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  touchStartX = null;
+  if (Math.abs(dx) < SWIPE_THRESHOLD) return;
+  navigate(dx < 0 ? 1 : -1);
+});
+
+/* ---- попапи з посиланням/приміткою: тап відкриває/закриває, клік поза — закриває ---- */
+document.addEventListener("click", e => {
+  const toggle = e.target.closest("[data-popup-toggle]");
+  document.querySelectorAll(".teacher__icon.is-open").forEach(btn => {
+    if (btn !== toggle) btn.classList.remove("is-open");
+  });
+  if (toggle){
+    toggle.classList.toggle("is-open");
+    e.stopPropagation();
+  }
+});
+
+/* =========================================================================
+   СТАРТ
+   ========================================================================= */
+loadSchedule();
+
+})();
+</script>
+</body>
+</html>
