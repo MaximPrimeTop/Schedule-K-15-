@@ -438,6 +438,9 @@ const CLOCK_REFRESH_MS = 60000;
 // Назви днів тижня, індекс відповідає JS getUTCDay(): 0 = неділя ... 6 = субота
 const DAY_NAMES = ["Неділя","Понеділок","Вівторок","Середа","Четвер","П'ятниця","Субота"];
 
+const ROTATION_START_DATE = Date.UTC(2026, 8, 7); // September 7, 2026 (бо перший тиждень без суботи)
+const ROTATION_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
 /* =========================================================================
    СТАН ЗАСТОСУНКУ
    ========================================================================= */
@@ -553,8 +556,22 @@ function getDayInfo(offset){
   const dateMs = addDaysUTC(todayUTC, offset);
   const weekdayIdx = new Date(dateMs).getUTCDay();
   const dayName = DAY_NAMES[weekdayIdx];
+
+  let scheduleDayName = dayName;
+
+  // saturday
+  if (weekdayIdx === 6)
+  {
+    const weekNumber = Math.floor((dateMs - ROTATION_START_DATE) / ROTATION_WEEK_MS);
+
+    const scheduleWeekdayIdx = weekNumber % 5 + 1; 
+
+    // monday-friday schedule
+    scheduleDayName = DAY_NAMES[scheduleWeekdayIdx];
+  }
+
   const rows = scheduleRows
-    .filter(r => normalizeDayName(r["День"]) === normalizeDayName(dayName))
+    .filter(r => normalizeDayName(r["День"]) === normalizeDayName(scheduleDayName))
     .sort((a, b) => (Number(a["№ пари"]) || 0) - (Number(b["№ пари"]) || 0));
   return { dateMs, weekdayIdx, dayName, rows };
 }
